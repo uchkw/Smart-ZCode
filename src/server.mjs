@@ -11,6 +11,7 @@ import { createSettings } from './settings.mjs';
 
 const publicDir = fileURLToPath(new URL('../public/', import.meta.url));
 const cookieName = 'smart_zcode_token';
+const iconLinks = '<link rel="icon" type="image/svg+xml" sizes="any" href="/_smart/icon.svg?v=3"><link rel="apple-touch-icon" href="/_smart/icon-192.png?v=3">';
 function equal(a, b) { const x = Buffer.from(a || ''), y = Buffer.from(b || ''); return x.length === y.length && timingSafeEqual(x, y); }
 function cookie(req) { try { return decodeURIComponent(req.headers.cookie?.split(';').map(s => s.trim()).find(s => s.startsWith(`${cookieName}=`))?.slice(cookieName.length + 1) || ''); } catch { return ''; } }
 function json(res, code, data) { res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(data)); }
@@ -77,9 +78,9 @@ export async function createApp({ upstream, token, stateDir, publicOrigin, monit
           // no-referrer makes browser form POSTs send Origin: null. The clean
           // login page can safely retain a same-origin referrer for CSRF checks.
           res.setHeader('Referrer-Policy', 'same-origin');
-          res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'");
+          res.setHeader('Content-Security-Policy', "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'");
           res.writeHead(401, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
-          return res.end('<!doctype html><html lang="en"><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Smart ZCode</title><body style="font:16px system-ui;background:#14171b;color:#eee;max-width:28rem;margin:15vh auto;padding:24px"><h1>Smart ZCode</h1><p>Connect using your ZCode access token.</p><form method="post" action="/_smart/login"><label>Access token <input name="token" type="password" required autocomplete="current-password" style="display:block;width:90%;padding:14px;margin:16px 0"></label><button style="padding:12px 24px">Connect</button></form></body></html>');
+          return res.end('<!doctype html><html lang="en"><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Smart ZCode</title>' + iconLinks + '<body style="font:16px system-ui;background:#14171b;color:#eee;max-width:28rem;margin:15vh auto;padding:24px"><img src="/_smart/icon.svg?v=3" width="64" height="64" alt="" style="border-radius:16px"><h1>Smart ZCode</h1><p>Connect using your ZCode access token.</p><form method="post" action="/_smart/login"><label>Access token <input name="token" type="password" required autocomplete="current-password" style="display:block;width:90%;padding:14px;margin:16px 0"></label><button style="padding:12px 24px">Connect</button></form></body></html>');
         }
         return json(res, 401, { error: 'Authentication required' });
       }
@@ -123,7 +124,16 @@ export async function createApp({ upstream, token, stateDir, publicOrigin, monit
         response.on('end', () => {
           let text = Buffer.concat(chunks).toString();
           text = text.replace(/<meta\s+name="viewport"[^>]*>/i, '<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content">');
-          text = text.replace('</head>', '<link rel="manifest" href="/_smart/manifest.webmanifest"><link rel="icon" type="image/svg+xml" href="/_smart/icon.svg?v=3"><link rel="apple-touch-icon" href="/_smart/icon-192.png?v=3"><link rel="stylesheet" href="/_smart/mobile.css"><script src="/_smart/mobile.js" defer></script></head>');
+          // Remove upstream icon candidates so browsers cannot select an older logo.
+          text = text.replace(/<head\b[^>]*>[\s\S]*?<\/head\s*>/i, head => {
+            head = head.replace(/<!--[\s\S]*?-->|<(script|style)\b[^>]*>[\s\S]*?<\/\1\s*>|<link\b(?:[^"'<>]|"[^"]*"|'[^']*')*>/gi, link => {
+              if (!/^<link\b/i.test(link)) return link;
+              const rel = link.match(/\srel\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i);
+              const values = (rel?.[1] ?? rel?.[2] ?? rel?.[3] ?? '').toLowerCase().split(/\s+/);
+              return values.some(value => ['icon', 'apple-touch-icon', 'apple-touch-icon-precomposed', 'mask-icon', 'manifest'].includes(value)) ? '' : link;
+            });
+            return head.replace(/<\/head\s*>/i, '<link rel="manifest" href="/_smart/manifest.webmanifest">' + iconLinks + '<link rel="stylesheet" href="/_smart/mobile.css"><script src="/_smart/mobile.js" defer></script></head>');
+          });
           delete outputHeaders['content-length']; delete outputHeaders.etag; delete outputHeaders['content-encoding'];
           outputHeaders['cache-control'] = 'no-store'; res.writeHead(response.statusCode, outputHeaders); res.end(text);
         });

@@ -54,7 +54,7 @@ test('Push endpoints reject internal and lookalike destinations', () => {
 test('Authenticated proxy injects mobile assets, protects API and relays binary WebSockets', async t => {
   const directory = await mkdtemp(join(tmpdir(), 'smart-zcode-test-'));
   let upstreamCookie;
-  const upstream = http.createServer((req, res) => { upstreamCookie = req.headers.cookie; res.writeHead(200, { 'Content-Type': 'text/html', 'Set-Cookie': 'leaked=secret' }); res.end('<html><head></head><body>ZCode</body></html>'); });
+  const upstream = http.createServer((req, res) => { upstreamCookie = req.headers.cookie; res.writeHead(200, { 'Content-Type': 'text/html', 'Set-Cookie': 'leaked=secret' }); res.end(`<html><head><!-- <link rel="icon" href="comment.png"> --><script>const sample = '<link rel="icon" href="script.png">';</script><style>/* <link rel="icon" href="style.png"> */</style><link rel="icon" href="/old-icon.png"><link href='/old-touch.png' rel='apple-touch-icon'><LINK REL="shortcut ICON" href="/old-shortcut.ico"><link rel=mask-icon href="/old-mask.svg"><link rel="manifest" href="/old-manifest.json"><link rel="stylesheet" href="/upstream.css"></head><body>ZCode</body></html>`); });
   const wsServer = new WebSocketServer({ server: upstream }); wsServer.on('connection', ws => ws.on('message', data => ws.send(data)));
   upstream.listen(0, '127.0.0.1'); await once(upstream, 'listening');
   const app = await createApp({ upstream: `http://127.0.0.1:${upstream.address().port}`, token: 'test-secret', stateDir: directory, monitorEnabled: false });
@@ -65,7 +65,13 @@ test('Authenticated proxy injects mobile assets, protects API and relays binary 
   assert.equal((await fetch(`${origin}/_smart/api/status`)).status, 401);
   assert.equal((await fetch(`${origin}/?token=wrong`, { redirect: 'manual' })).status, 401);
   const loginPage = await fetch(origin, { headers: { Accept: 'text/html' } });
-  assert.match(await loginPage.text(), /method="post" action="\/_smart\/login"/);
+  const loginHtml = await loginPage.text();
+  assert.match(loginHtml, /method="post" action="\/_smart\/login"/);
+  assert.match(loginHtml, /rel="icon"[^>]+href="\/_smart\/icon.svg\?v=3"/);
+  assert.match(loginPage.headers.get('content-security-policy'), /img-src 'self'/);
+  const icon = await fetch(`${origin}/_smart/icon.svg?v=3`);
+  assert.equal(icon.status, 200);
+  assert.match(icon.headers.get('content-type'), /image\/svg\+xml/);
   assert.match(loginPage.headers.get('content-security-policy'), /form-action 'self'/);
   assert.equal(loginPage.headers.get('referrer-policy'), 'same-origin');
   const signIn = (requestOrigin, value) => fetch(`${origin}/_smart/login`, { method: 'POST', redirect: 'manual', headers: { Origin: requestOrigin, 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ token: value }) });
@@ -80,7 +86,14 @@ test('Authenticated proxy injects mobile assets, protects API and relays binary 
   assert.match(login.headers.get('set-cookie'), /HttpOnly; SameSite=Strict/);
   const Cookie = login.headers.get('set-cookie').split(';')[0];
   const result = await fetch(origin, { headers: { Cookie } });
-  assert.match(await result.text(), /_smart\/mobile.js/); assert.equal(result.headers.get('set-cookie'), null);
+  const html = await result.text();
+  assert.match(html, /_smart\/mobile.js/); assert.equal(result.headers.get('set-cookie'), null);
+  assert.doesNotMatch(html, /old-(icon|touch|shortcut|mask|manifest)/);
+  assert.match(html, /href="\/upstream.css"/);
+  assert.match(html, /<!-- <link rel="icon" href="comment.png"> -->/);
+  assert.match(html, /<script>const sample = '<link rel="icon" href="script.png">';<\/script>/);
+  assert.match(html, /<style>\/\* <link rel="icon" href="style.png"> \*\/<\/style>/);
+  assert.match(html, /rel="icon"[^>]+href="\/_smart\/icon.svg\?v=3"/);
   assert.equal(result.headers.get('x-frame-options'), 'DENY');
   assert.match(result.headers.get('content-security-policy'), /frame-ancestors 'none'/);
   assert.equal(result.headers.get('cache-control'), 'no-store');

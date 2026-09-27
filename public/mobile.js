@@ -5,7 +5,7 @@
   let composing = false, escEnabled = false, sidebarOpen = false;
   let settingsReady = false, savingSettings = false, settingsRevision = -1;
   const header = document.createElement('header'); header.id = 'smart-header';
-  header.innerHTML = `<button id="smart-menu" aria-label="セッション一覧を開く" aria-expanded="false"><span class="smart-logo" aria-hidden="true">Z</span></button><div class="smart-brand">Smart <strong>ZCode</strong><span id="smart-connection">接続を確認中</span></div><button id="smart-settings" aria-label="Smart ZCode の設定"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M9 21h6"/></svg></button>`;
+  header.innerHTML = `<button id="smart-menu" aria-label="セッション一覧を開く" aria-expanded="false"><img class="smart-logo" src="/_smart/icon.svg?v=3" width="32" height="32" alt="" aria-hidden="true"></button><div class="smart-brand">Smart <strong>ZCode</strong><span id="smart-connection">接続を確認中</span></div><button id="smart-settings" aria-label="Smart ZCode の設定"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M9 21h6"/></svg></button>`;
   document.body.append(header);
   const backdrop = document.createElement('button'); backdrop.id = 'smart-backdrop'; backdrop.setAttribute('aria-label', 'セッション一覧を閉じる'); document.body.append(backdrop);
   const panel = document.createElement('dialog'); panel.id = 'smart-dialog'; panel.setAttribute('aria-labelledby', 'smart-title');

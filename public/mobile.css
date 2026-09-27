@@ -29,7 +29,7 @@
   #root .h-dvh { height: 100% !important; min-height: 0 !important; }
   #smart-header { display: flex; align-items: center; gap: 10px; left: 0; right: 0; top: var(--smart-top, 0px); height: var(--smart-header-height); padding: calc(6px + env(safe-area-inset-top, 0px)) 12px 6px; background: #171b20; border-bottom: 1px solid #2c323a; z-index: 80; }
   #smart-header #smart-menu { display: grid; background: transparent; border: none; padding: 4px; }
-  .smart-logo { width: 32px; height: 32px; border: 1px solid #80b8ad; color: #b5e9dd; border-radius: 10px; font-size: 22px; font-weight: 750; font-style: italic; line-height: 30px; }
+  .smart-logo { display: block; width: 32px; height: 32px; border-radius: 8px; }
   #smart-header .smart-brand { display: block; flex: 1; font-size: 15px; letter-spacing: -.2px; }
   #smart-header .smart-brand strong { font-weight: 650; }
   #smart-connection { display: block; font-size: 10px; letter-spacing: .4px; color: #adb7c1; margin-top: 1px; }

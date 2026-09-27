@@ -12,6 +12,8 @@ try {
     context.setDefaultTimeout(15000);
     const page = await context.newPage(); const errors = []; page.on('pageerror', e => errors.push(e.message));
     await page.goto(origin);
+    assert.equal(await page.locator('link[rel="icon"]').getAttribute('href'), '/_smart/icon.svg?v=3');
+    await page.waitForFunction(() => document.querySelector('img')?.naturalWidth > 0);
     await page.locator('input[name="token"]').fill(process.env.ZCODE_TOKEN);
     await Promise.all([
       page.waitForNavigation({ waitUntil: 'domcontentloaded' }),
@@ -30,8 +32,13 @@ try {
       assert.equal(await page.evaluate(() => isSecureContext), true);
       await page.evaluate(() => navigator.serviceWorker.ready);
     }
+    assert.equal(await page.locator('link[rel~="icon"]').count(), 1);
+    assert.equal(await page.locator('link[rel="icon"]').getAttribute('href'), '/_smart/icon.svg?v=3');
+    await page.waitForFunction(() => document.querySelector('#smart-menu img')?.naturalWidth > 0);
     assert.ok(await page.evaluate(() => document.body.scrollWidth <= innerWidth));
     if (width < 768) {
+      assert.equal(await page.locator('#smart-menu img').isVisible(), true);
+      if (width === 390) await page.locator('#smart-header').screenshot({ path: 'artifacts/mobile-header.png' });
       assert.equal(await page.locator('[data-workspace-sidebar-panel]').isVisible(), false);
       await page.click('#smart-menu'); await page.locator('[data-testid="sidebar"]').waitFor();
       await page.waitForTimeout(350);
