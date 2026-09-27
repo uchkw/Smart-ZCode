@@ -1,0 +1,16 @@
+[Unit]
+Description=Smart ZCode mobile wrapper
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/local/Smart-ZCode
+EnvironmentFile=%h/local/Smart-ZCode/.env
+# Replace with the absolute path printed by command -v node.
+ExecStart=/usr/bin/node src/server.mjs
+Restart=on-failure
+RestartSec=5
+UMask=0077
+
+[Install]
+WantedBy=default.target

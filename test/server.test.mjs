@@ -1,0 +1,107 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import http from 'node:http';
+import { once } from 'node:events';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { WebSocket, WebSocketServer } from 'ws';
+import { createApp } from '../src/server.mjs';
+import { encode, decodeMessage, frame } from '../src/rpc.mjs';
+import { notificationFor } from '../src/monitor.mjs';
+import { WireDecoder, crc32 } from '../src/wire.mjs';
+import { validateSubscription } from '../src/push.mjs';
+
+test('RPC serializes unicode and rejects truncation', () => {
+  const header = [204, 1], body = { message: '回答が必要です', nested: [true, null] };
+  assert.deepEqual(decodeMessage(Buffer.concat([encode(header), encode(body)])), [header, body]);
+  assert.throws(() => decodeMessage(Buffer.from([1, 100, 32])));
+  assert.equal(frame(header, body).readUInt32BE(9), encode(header).length + encode(body).length);
+  for (const number of [-2147483648, -1, 2147483647, 2147483648, 2 ** 40]) assert.equal(decodeMessage(Buffer.concat([encode(header), encode(number)]))[1], number);
+});
+test('Question notifications suppress duplicate questions, subagents and completed summaries', () => {
+  const task = { sessionId: 's', title: 'Task', phase: 'running', lastActivityAt: 1 };
+  assert.equal(notificationFor(undefined, { ...task, phase: 'completedSuccess' }), null);
+  const question = { ...task, pendingInteraction: { interactionId: 'q', kind: 'userInput' } };
+  assert.match(notificationFor(task, question).title, /回答/);
+  assert.equal(notificationFor(question, question), null);
+  assert.equal(notificationFor(task, { ...question, parentSessionId: 'parent' }), null);
+});
+test('RPC rejects overflowing integers and excessive array allocations', () => {
+  assert.throws(() => decodeMessage(Buffer.from([6, 128, 128, 128, 128, 16, 0])), /Invalid RPC integer/);
+  const tooMany = Buffer.concat([Buffer.from([4, 128, 128, 4]), Buffer.alloc(65537)]);
+  assert.throws(() => decodeMessage(tooMany), /Invalid RPC array/);
+  const nested = Array.from({ length: 256 }, () => Array(256).fill(undefined));
+  assert.throws(() => decodeMessage(Buffer.concat([encode(nested), encode(undefined)])), /RPC (array|value)/);
+});
+test('Wire reassembles out-of-order fragments and rejects corruption', () => {
+  const logical = { topic: 'sessions-index/x', subscriptionId: 's', fromSeq: 0, toSeq: 1, payload: { kind: 'snapshot', snapshot: { sessions: [] } } };
+  const data = Buffer.from(JSON.stringify(logical));
+  const common = { wireVersion: 3, kind: 'fragment', topic: logical.topic, subscriptionId: 's', logicalFrameId: 'l', logicalBytes: data.length, fragmentCount: 2, checksum: { algorithm: 'crc32', value: crc32(data) } };
+  const first = { ...common, fragmentIndex: 0, dataBase64: data.subarray(0, 30).toString('base64') };
+  const last = { ...common, fragmentIndex: 1, dataBase64: data.subarray(30).toString('base64') };
+  const decoder = new WireDecoder(); assert.equal(decoder.accept(last), null); assert.deepEqual(decoder.accept(first), logical);
+  const invalid = new WireDecoder(); invalid.accept(first);
+  assert.throws(() => invalid.accept({ ...last, checksum: { algorithm: 'crc32', value: '00000000' } }));
+  for (const logicalBytes of [undefined, NaN, Infinity, -1, 0.5]) assert.throws(() => new WireDecoder().accept({ ...first, logicalBytes }), /Invalid wire fragment/);
+  assert.deepEqual(decoder.accept({ ...common, kind: 'complete', frame: logical }), logical);
+  assert.throws(() => decoder.accept({ ...common, kind: 'complete', frame: { ...logical, padding: 'x'.repeat(16 * 1024 * 1024) } }), /Logical frame too large/);
+});
+test('Push endpoints reject internal and lookalike destinations', () => {
+  for (const endpoint of ['http://localhost/push', 'https://127.0.0.1/push', 'https://fcm.googleapis.com.evil.test/push', 'https://user@fcm.googleapis.com/push']) assert.throws(() => validateSubscription({ endpoint }));
+});
+
+test('Authenticated proxy injects mobile assets, protects API and relays binary WebSockets', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'smart-zcode-test-'));
+  let upstreamCookie;
+  const upstream = http.createServer((req, res) => { upstreamCookie = req.headers.cookie; res.writeHead(200, { 'Content-Type': 'text/html', 'Set-Cookie': 'leaked=secret' }); res.end('<html><head></head><body>ZCode</body></html>'); });
+  const wsServer = new WebSocketServer({ server: upstream }); wsServer.on('connection', ws => ws.on('message', data => ws.send(data)));
+  upstream.listen(0, '127.0.0.1'); await once(upstream, 'listening');
+  const app = await createApp({ upstream: `http://127.0.0.1:${upstream.address().port}`, token: 'test-secret', stateDir: directory, monitorEnabled: false });
+  app.server.listen(0, '127.0.0.1'); await once(app.server, 'listening');
+  const origin = `http://127.0.0.1:${app.server.address().port}`;
+  t.after(async () => { app.close(); wsServer.close(); upstream.close(); await rm(directory, { recursive: true, force: true }); });
+  assert.equal((await fetch(origin)).status, 401);
+  assert.equal((await fetch(`${origin}/_smart/api/status`)).status, 401);
+  assert.equal((await fetch(`${origin}/?token=wrong`, { redirect: 'manual' })).status, 401);
+  const loginPage = await fetch(origin, { headers: { Accept: 'text/html' } });
+  assert.match(await loginPage.text(), /method="post" action="\/_smart\/login"/);
+  assert.match(loginPage.headers.get('content-security-policy'), /form-action 'self'/);
+  assert.equal(loginPage.headers.get('referrer-policy'), 'same-origin');
+  const signIn = (requestOrigin, value) => fetch(`${origin}/_smart/login`, { method: 'POST', redirect: 'manual', headers: { Origin: requestOrigin, 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ token: value }) });
+  assert.equal((await signIn('https://evil.test', 'test-secret')).status, 403);
+  assert.equal((await signIn('null', 'test-secret')).status, 403);
+  assert.equal((await signIn(origin, 'wrong')).status, 401);
+  const posted = await signIn(origin, 'test-secret');
+  assert.equal(posted.status, 303); assert.equal(posted.headers.get('location'), '/');
+  assert.match(posted.headers.get('set-cookie'), /HttpOnly; SameSite=Strict/);
+  const login = await fetch(`${origin}/?token=test-secret`, { redirect: 'manual' });
+  assert.equal(login.status, 303); assert.equal(login.headers.get('location'), '/');
+  assert.match(login.headers.get('set-cookie'), /HttpOnly; SameSite=Strict/);
+  const Cookie = login.headers.get('set-cookie').split(';')[0];
+  const result = await fetch(origin, { headers: { Cookie } });
+  assert.match(await result.text(), /_smart\/mobile.js/); assert.equal(result.headers.get('set-cookie'), null);
+  assert.equal(result.headers.get('x-frame-options'), 'DENY');
+  assert.match(result.headers.get('content-security-policy'), /frame-ancestors 'none'/);
+  assert.equal(result.headers.get('cache-control'), 'no-store');
+  assert.equal(upstreamCookie, 'zcode_lite_token=test-secret');
+  assert.equal((await fetch(`${origin}/_smart/api/status`, { headers: { Cookie } })).status, 200);
+  assert.equal((await fetch(`${origin}/_smart/api/status`, { headers: { Cookie, Origin: 'https://evil.test' } })).status, 403);
+  assert.equal((await fetch(origin, { headers: { Cookie, 'Sec-Fetch-Site': 'same-site' } })).status, 403);
+  const navigation = { Cookie, 'Sec-Fetch-Site': 'none', 'Sec-Fetch-Mode': 'navigate', 'Sec-Fetch-Dest': 'document' };
+  // fetch replaces Sec-Fetch-Mode; use HTTP to reproduce browser navigation.
+  const navigate = method => new Promise((resolve, reject) => {
+    const req = http.request(origin, { method, headers: navigation }, res => { res.resume(); res.on('end', () => resolve(res.statusCode)); });
+    req.on('error', reject); req.end();
+  });
+  assert.equal(await navigate('GET'), 200);
+  assert.equal(await navigate('POST'), 403);
+  assert.equal((await fetch(origin, { headers: { Cookie, 'Sec-Fetch-Site': 'none' } })).status, 403);
+  assert.equal((await fetch(`${origin}/_smart/api/subscribe`, { method: 'POST', headers: { Cookie, Origin: 'https://evil.test', 'X-Smart-ZCode': '1', 'Content-Type': 'application/json' }, body: '{}' })).status, 403);
+  const sw = await fetch(`${origin}/_smart/sw.js`); assert.equal(sw.headers.get('service-worker-allowed'), '/');
+  const client = new WebSocket(origin.replace('http:', 'ws:') + '/ws', { headers: { Cookie, Origin: origin } });
+  await once(client, 'open'); client.send(Buffer.from([0, 1, 255]));
+  const [data] = await once(client, 'message'); assert.deepEqual(data, Buffer.from([0, 1, 255])); client.close();
+  const forbidden = new WebSocket(origin.replace('http:', 'ws:') + '/ws');
+  forbidden.on('error', () => {}); const [error] = await once(forbidden, 'error'); assert.match(error.message, /403/);
+});

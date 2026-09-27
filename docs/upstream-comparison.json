@@ -1,0 +1,51 @@
+{
+  "upstreamCommit": "29628c9acdb81b703bbd4080c207a0e7ce5e276e",
+  "comparisons": [
+    {
+      "path": "packages/server/src/http.ts",
+      "upstreamObject": "9af1bb14d3240063317d33120444c815fe5c7d95",
+      "identical": true
+    },
+    {
+      "path": "packages/rpc/src",
+      "upstreamObject": "05da3a2eba17757d01d81b3e2f91528aabe5051a",
+      "identical": true
+    },
+    {
+      "path": "packages/services/src/zcode-agent",
+      "upstreamObject": "c4143d407b20d284247e09b6be59676e64dbedc9",
+      "identical": true
+    },
+    {
+      "path": "packages/services/src/session/zcodeTaskService.ts",
+      "upstreamObject": "6a81a71fcf5ec2d9072c6d94d1be868b7908b1e3",
+      "identical": true
+    },
+    {
+      "path": "packages/shared/src/zcode-protocol-v4",
+      "upstreamObject": "8eeeeb74b4c67fcb5dc9b6abcfcc4d389f6124e2",
+      "identical": true
+    },
+    {
+      "path": "packages/ui/src",
+      "upstreamObject": "892155e3394b8f1c70bc6d1c9acadc79f48103c0",
+      "identical": true
+    },
+    {
+      "path": "packages/web/src",
+      "upstreamObject": "9645fafd87caf071c71effac2eaacee38e5f6bbb",
+      "identical": true
+    },
+    {
+      "path": "packages/zcode-server-cli",
+      "upstreamObject": "eca2f83794c8231c71e2b56fe6682b798e664206",
+      "identical": true
+    },
+    {
+      "path": "apps/zcode-cli/packages/bootstrap/src/zcode-protocol-v4",
+      "upstreamObject": "eb47d9f19e70350ee9aa71606af4d88f0e5c44b2",
+      "identical": true
+    }
+  ],
+  "scope": "Source comparison of nine integration paths against the recorded ZCode reference revision. Matching paths do not establish full application behavior or security equivalence."
+}

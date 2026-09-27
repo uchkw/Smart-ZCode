@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <title>Smart ZCode — neon-green S and white Z</title>
+  <path fill="#10151b" d="M0 0h512v512H0z"/>
+  <g transform="translate(108 132) scale(0.75) translate(-148 -150)"><path fill="#b9ff3b" d="M350 150H190L148 192V245L317 291V322H160V362H329L371 320V264L202 218V190H350Z"/></g>
+  <g transform="translate(231 232) scale(0.75) translate(-147 -151)">
+    <path d="M150 151H365V189L210 319H362V361H147V323L302 193H150Z" fill="#10151b" stroke="#10151b" stroke-width="16" stroke-linejoin="round"/>
+    <path fill="#f0f6ef" d="M150 151H365V189L210 319H362V361H147V323L302 193H150Z"/>
+    <path d="M243 258l24 29" fill="none" stroke="#10151b" stroke-width="9"/>
+  </g>
+</svg>

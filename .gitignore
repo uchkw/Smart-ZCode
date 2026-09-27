@@ -1,0 +1,13 @@
+node_modules/
+.env
+.env.*
+!.env.example
+.state/
+artifacts/
+*.log
+*.pem
+*.key
+*.p12
+*.pfx
+.DS_Store
+._*
